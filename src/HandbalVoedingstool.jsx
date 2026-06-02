@@ -2454,6 +2454,41 @@ const genereerBoodschappen = (week, ingrDB) => {
 };
 
 // =============================================================================
+// HERBRUIKBAAR GETALVELD
+// Lost het klassieke "controlled number input"-probleem op: value={getal} samen
+// met onChange -> parse(...) || fallback springt direct terug naar de fallback
+// zodra je het veld leegmaakt, waardoor je geen nieuw getal kunt typen.
+// Dit component houdt tijdens het typen een lokale tekstversie bij (zodat het
+// veld even leeg/onaf mag zijn), geeft alleen geldige getallen live door aan de
+// ouder (zonder te klemmen, zodat 2 -> 25 niet blijft hangen op het minimum), en
+// toont zodra het veld de focus verliest weer de actuele waarde.
+// =============================================================================
+function NumberField({ value, onValue, decimal = false, className = 'input-style', ...rest }) {
+  const [draft, setDraft] = useState(null); // null = niet aan het bewerken
+  const parse = (raw) => (decimal ? parseFloat(raw) : parseInt(raw, 10));
+  const display = draft !== null
+    ? draft
+    : (value === '' || value === null || value === undefined || Number.isNaN(value) ? '' : String(value));
+  return (
+    <input
+      {...rest}
+      className={className}
+      type="number"
+      inputMode={decimal ? 'decimal' : 'numeric'}
+      value={display}
+      onChange={(e) => {
+        const raw = e.target.value;
+        setDraft(raw);                    // laat leeg/onaf toe tijdens typen
+        if (raw === '') return;           // niets doorgeven: ouder houdt huidige waarde
+        const n = parse(raw);
+        if (!Number.isNaN(n)) onValue(n); // geldige waarde live door, niet klemmen
+      }}
+      onBlur={() => setDraft(null)}       // stop met bewerken -> toon weer de waarde
+    />
+  );
+}
+
+// =============================================================================
 // REACT COMPONENT
 // =============================================================================
 
@@ -3531,11 +3566,11 @@ export default function HandbalVoedingstoolV2() {
               <div className="stat-card" style={{ marginBottom: 16 }}>
                 <h3 style={{ fontSize: 11, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#6b6b65', margin: '0 0 16px 0' }}>{t('sectie_01')}</h3>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
-                  <div><label className="label-style">{t('label_gewicht')}</label><input className="input-style" type="number" value={input.gewicht} onChange={e => u('gewicht', parseFloat(e.target.value) || 0)} /></div>
-                  <div><label className="label-style">{t('label_lengte')}</label><input className="input-style" type="number" value={input.lengte} onChange={e => u('lengte', parseFloat(e.target.value) || 0)} /></div>
+                  <div><label className="label-style">{t('label_gewicht')}</label><NumberField decimal value={input.gewicht} onValue={v => u('gewicht', v)} /></div>
+                  <div><label className="label-style">{t('label_lengte')}</label><NumberField value={input.lengte} onValue={v => u('lengte', v)} /></div>
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
-                  <div><label className="label-style">{t('label_leeftijd')}</label><input className="input-style" type="number" value={input.leeftijd} onChange={e => u('leeftijd', parseInt(e.target.value) || 0)} /></div>
+                  <div><label className="label-style">{t('label_leeftijd')}</label><NumberField value={input.leeftijd} onValue={v => u('leeftijd', v)} /></div>
                   <div><label className="label-style">{taal === 'en' ? 'Body fat % (optional)' : 'Vet % (optioneel)'}</label><input className="input-style" type="number" value={input.vetpct} placeholder="laat leeg" onChange={e => u('vetpct', e.target.value)} /></div>
                 </div>
                 <label className="label-style">{t('label_geslacht')}</label>
@@ -3550,7 +3585,7 @@ export default function HandbalVoedingstoolV2() {
                 <h3 style={{ fontSize: 11, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#6b6b65', margin: '0 0 16px 0' }}>{t('sectie_02')}</h3>
                 <div style={{ marginBottom: 14 }}>
                   <label className="label-style">{t('label_handbal_pw')}</label>
-                  <input className="input-style" type="number" min="0" max="6" value={input.handbalPerWeek} onChange={e => u('handbalPerWeek', parseInt(e.target.value) || 0)} />
+                  <NumberField min="0" max="6" value={input.handbalPerWeek} onValue={v => u('handbalPerWeek', v)} />
                 </div>
                 <div style={{ marginBottom: 14 }}>
                   <label className="label-style">{t('label_handbal_duur')}</label>
@@ -3562,7 +3597,7 @@ export default function HandbalVoedingstoolV2() {
                 </div>
                 <div style={{ marginBottom: 14 }}>
                   <label className="label-style">{t('label_kracht_pw')}</label>
-                  <input className="input-style" type="number" min="0" max="5" value={input.krachtPerWeek} onChange={e => u('krachtPerWeek', parseInt(e.target.value) || 0)} />
+                  <NumberField min="0" max="5" value={input.krachtPerWeek} onValue={v => u('krachtPerWeek', v)} />
                 </div>
                 <div style={{ marginBottom: 14 }}>
                   <label className="label-style">{t('label_kracht_duur')}</label>
@@ -3574,7 +3609,7 @@ export default function HandbalVoedingstoolV2() {
                 </div>
                 <div style={{ marginBottom: 14 }}>
                   <label className="label-style">{t('label_cardio_pw')}</label>
-                  <input className="input-style" type="number" min="0" max="7" value={input.cardioPerWeek || 0} onChange={e => u('cardioPerWeek', parseInt(e.target.value) || 0)} />
+                  <NumberField min="0" max="7" value={input.cardioPerWeek} onValue={v => u('cardioPerWeek', v)} />
                   <p style={{ fontSize: 11, color: '#6b6b65', margin: '4px 0 0 0', lineHeight: 1.5 }}>
                     {t('label_cardio_toelichting')}
                   </p>
@@ -6257,17 +6292,17 @@ export default function HandbalVoedingstoolV2() {
                   </div>
                   <div>
                     <label className="label-style">Leeftijd</label>
-                    <input className="input-style" type="number" min="15" max="40" value={input.leeftijd} onChange={e => u('leeftijd', parseInt(e.target.value) || 22)} />
+                    <NumberField min="15" max="40" value={input.leeftijd} onValue={v => u('leeftijd', v)} />
                   </div>
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 22 }}>
                   <div>
                     <label className="label-style">{t('label_gewicht')}</label>
-                    <input className="input-style" type="number" step="0.1" value={input.gewicht} onChange={e => u('gewicht', parseFloat(e.target.value) || 80)} />
+                    <NumberField step="0.1" decimal value={input.gewicht} onValue={v => u('gewicht', v)} />
                   </div>
                   <div>
                     <label className="label-style">Lengte (cm)</label>
-                    <input className="input-style" type="number" value={input.lengte} onChange={e => u('lengte', parseInt(e.target.value) || 180)} />
+                    <NumberField value={input.lengte} onValue={v => u('lengte', v)} />
                   </div>
                 </div>
 
@@ -6286,11 +6321,11 @@ export default function HandbalVoedingstoolV2() {
 
                 <div style={{ marginBottom: 14 }}>
                   <label className="label-style">Handbal-sessies per week</label>
-                  <input className="input-style" type="number" min="0" max="6" value={input.handbalPerWeek} onChange={e => u('handbalPerWeek', parseInt(e.target.value) || 3)} />
+                  <NumberField min="0" max="6" value={input.handbalPerWeek} onValue={v => u('handbalPerWeek', v)} />
                 </div>
                 <div style={{ marginBottom: 14 }}>
                   <label className="label-style">Krachttraining per week</label>
-                  <input className="input-style" type="number" min="0" max="5" value={input.krachtPerWeek} onChange={e => u('krachtPerWeek', parseInt(e.target.value) || 2)} />
+                  <NumberField min="0" max="5" value={input.krachtPerWeek} onValue={v => u('krachtPerWeek', v)} />
                 </div>
                 <div style={{ marginBottom: 22 }}>
                   <label className="label-style">{taal === 'en' ? 'When do you usually train?' : 'Wanneer train je meestal?'}</label>
