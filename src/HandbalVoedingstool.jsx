@@ -2556,6 +2556,17 @@ function NumberField({ value, onValue, decimal = false, className = 'input-style
 // REACT COMPONENT
 // =============================================================================
 
+// Iconen + korte labels per dagtype voor de weekstrip
+const DAGTYPE_ICOON = {
+  rustdag: '💤', krachtdag: '🏋', cardiodag: '🏃',
+  handbaldag: '🤾', kracht_handbal: '💪', wedstrijddag: '🏆',
+};
+const dagtypeKort = (type, taal) => {
+  const nl = { rustdag: 'Rust', krachtdag: 'Kracht', cardiodag: 'Cardio', handbaldag: 'Handbal', kracht_handbal: 'Kr+HB', wedstrijddag: 'Match' };
+  const en = { rustdag: 'Rest', krachtdag: 'Strength', cardiodag: 'Cardio', handbaldag: 'Handball', kracht_handbal: 'Str+HB', wedstrijddag: 'Match' };
+  return (taal === 'en' ? en : nl)[type] || type;
+};
+
 export default function HandbalVoedingstoolV2() {
   const DEFAULT_INPUT = {
     gewicht: 80, lengte: 185, leeftijd: 22, geslacht: 'man', vetpct: '',
@@ -2586,6 +2597,10 @@ export default function HandbalVoedingstoolV2() {
   });
   const [activeTab, setActiveTab] = useState('dagschema');
   const [activeDay, setActiveDay] = useState('handbaldag');
+  // Welke weekdag (0=ma … 6=zo) wordt bekeken; standaard = vandaag.
+  const [actieveWeekdag, setActieveWeekdag] = useState(() => {
+    try { return (new Date().getDay() + 6) % 7; } catch (e) { return 0; }
+  });
   const [trainingsdagen, setTrainingsdagen] = useState(() => {
     try {
       const saved = window.localStorage && window.localStorage.getItem('hb-trainingsdagen-v12');
@@ -2676,6 +2691,7 @@ export default function HandbalVoedingstoolV2() {
   const [pdfBezig, setPdfBezig] = useState(false);
 
   const u = (k, v) => setInput(p => ({ ...p, [k]: v }));
+  const vandaagIndex = (() => { try { return (new Date().getDay() + 6) % 7; } catch (e) { return -1; } })();
 
   // -------- PROFIELEN-OPSLAG via window.storage --------
   // Auto-bewaar input bij elke wijziging (localStorage)
@@ -2687,6 +2703,14 @@ export default function HandbalVoedingstoolV2() {
       }
     } catch(e) {}
   }, [input, trainingsdagen]);
+
+  // Houd het bekeken dagtype (activeDay) gelijk aan het type van de gekozen
+  // weekdag, zodat de weekstrip, de weekplanning-tab en het dagschema in sync
+  // blijven (één bron: actieveWeekdag + trainingsdagen).
+  useEffect(() => {
+    const type = trainingsdagen[actieveWeekdag];
+    if (type && type !== activeDay) setActiveDay(type);
+  }, [actieveWeekdag, trainingsdagen]);
 
   const laadProfielenLijst = async () => {
     setProfielenLaden(true);
@@ -4095,7 +4119,16 @@ export default function HandbalVoedingstoolV2() {
                   </div>
                 )}
 
-                <h2 className="display-font" style={{ fontSize: 28, marginTop: 0, marginBottom: 16 }}>{t('dagdoelen_titel')}</h2>
+                <h2 className="display-font" style={{ fontSize: 28, marginTop: 0, marginBottom: 4 }}>{t('dagdoelen_titel')}</h2>
+                <div style={{ fontSize: 13, color: '#6b6b65', marginBottom: 14 }}>
+                  {taal === 'en' ? 'Showing' : 'Je bekijkt'}:{' '}
+                  <strong style={{ color: '#1a1a1a' }}>
+                    {t('dag_namen')[actieveWeekdag]} · {DAGTYPE_ICOON[trainingsdagen[actieveWeekdag]] || ''} {t('dag_' + trainingsdagen[actieveWeekdag])}
+                  </strong>
+                  {actieveWeekdag === vandaagIndex && (
+                    <span style={{ color: '#16a34a', fontWeight: 700 }}> · {taal === 'en' ? 'today' : 'vandaag'}</span>
+                  )}
+                </div>
 
                 {/* MET breakdown banner */}
                 <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', padding: '10px 14px', marginBottom: 14, fontSize: 12, display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'center' }}>
@@ -4263,22 +4296,62 @@ export default function HandbalVoedingstoolV2() {
 
                 {activeTab === 'dagschema' && (
                   <>
-                    <div style={{ display: 'flex', gap: 0, marginBottom: 20, borderBottom: '1px solid #e5e5e0' }}>
-                      {[
-                        { v: 'rustdag',       label: t('dag_rustdag') },
-                        { v: 'krachtdag',     label: t('dag_krachtdag') },
-                        { v: 'cardiodag',     label: t('dag_cardiodag') },
-                        { v: 'handbaldag',    label: t('dag_handbaldag') },
-                        { v: 'kracht_handbal',label: t('dag_kracht_handbal') },
-                        { v: 'wedstrijddag',  label: t('dag_wedstrijddag') },
-                      ].map(d => (
-                        <button key={d.v} onClick={() => setActiveDay(d.v)} style={{
-                          padding: '12px 20px', background: 'none', border: 'none',
-                          borderBottom: activeDay === d.v ? '3px solid #d94f30' : '3px solid transparent',
-                          cursor: 'pointer', fontSize: 15, fontWeight: activeDay === d.v ? 600 : 400,
-                          color: activeDay === d.v ? '#1a1a1a' : '#6b6b65', fontFamily: 'inherit'
-                        }}>{d.label}</button>
-                      ))}
+                    {/* WEEKSTRIP — kies welke dag je bekijkt én plan je week vooruit */}
+                    <div style={{ marginBottom: 20, padding: '14px 16px', background: '#fafaf7', border: '1px solid #e5e5e0' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 10, flexWrap: 'wrap', gap: 4 }}>
+                        <h3 style={{ fontSize: 11, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#6b6b65', margin: 0 }}>
+                          {taal === 'en' ? 'Your week — tap a day' : 'Jouw week — tik een dag'}
+                        </h3>
+                        <span style={{ fontSize: 11, color: '#9a9a92' }}>
+                          {taal === 'en' ? 'set its type below' : 'type kies je hieronder'}
+                        </span>
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, minmax(0, 1fr))', gap: 5 }}>
+                        {trainingsdagen.map((type, i) => {
+                          const bekeken = i === actieveWeekdag;
+                          const vandaag = i === vandaagIndex;
+                          return (
+                            <button key={i} onClick={() => setActieveWeekdag(i)} title={t('dag_' + type)} style={{
+                              display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2,
+                              padding: '7px 1px 5px', cursor: 'pointer', fontFamily: 'inherit',
+                              minWidth: 0, overflow: 'hidden',
+                              background: bekeken ? '#fff7ed' : '#fff',
+                              border: bekeken ? '2px solid #d94f30' : '1px solid #e5e5e0',
+                            }}>
+                              <span className="mono" style={{ fontSize: 10, fontWeight: bekeken ? 700 : 400, color: bekeken ? '#d94f30' : '#6b6b65' }}>
+                                {t('dag_namen')[i]}
+                              </span>
+                              <span style={{ fontSize: 17, lineHeight: 1 }}>{DAGTYPE_ICOON[type] || '•'}</span>
+                              <span style={{ fontSize: 9, color: '#3a3a36', textAlign: 'center', maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{dagtypeKort(type, taal)}</span>
+                              <span style={{ fontSize: 7.5, fontWeight: 700, letterSpacing: '0.03em', color: '#16a34a', whiteSpace: 'nowrap', visibility: vandaag ? 'visible' : 'hidden' }}>
+                                ● {taal === 'en' ? 'today' : 'vandaag'}
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
+                        <span style={{ fontSize: 13, color: '#3a3a36' }}>
+                          {taal === 'en'
+                            ? `${t('dag_namen')[actieveWeekdag]} is a:`
+                            : `${t('dag_namen')[actieveWeekdag]} is een:`}
+                        </span>
+                        <select
+                          value={trainingsdagen[actieveWeekdag]}
+                          onChange={e => { const n = [...trainingsdagen]; n[actieveWeekdag] = e.target.value; setTrainingsdagen(n); }}
+                          style={{ flex: 1, minWidth: 160, maxWidth: 240, padding: '8px 10px', fontSize: 14, border: '1px solid #d94f30', background: '#fff', fontFamily: 'inherit' }}
+                        >
+                          <option value="rustdag">{t('dag_rustdag')}</option>
+                          <option value="krachtdag">{t('dag_krachtdag')}</option>
+                          <option value="cardiodag">{t('dag_cardiodag')}</option>
+                          <option value="handbaldag">{t('dag_handbaldag')}</option>
+                          <option value="kracht_handbal">{t('dag_kracht_handbal')}</option>
+                          <option value="wedstrijddag">{t('dag_wedstrijddag')}</option>
+                        </select>
+                        <span style={{ fontSize: 11, color: '#9a9a92' }}>
+                          {taal === 'en' ? '· full week in "Weekly plan"' : '· hele week in "Weekplanning"'}
+                        </span>
+                      </div>
                     </div>
 
                     {dagSchema && dagSchema.doelen && dagSchema.doelen.dagtype !== 'trainingsdag' && (
