@@ -2290,13 +2290,24 @@ const genereerDagSchema = (input, dagtype, alGebruikt = {}, categoriesVoorDag = 
   //   • Meer kracht/cardio sessies → hogere TDEE → ook rustdagen stijgen ✓
   //   • Op een rustdag is er geen dag-specifieke training, maar het lichaam
   //     heeft nog steeds meer energie nodig voor herstel na meer trainingsvolume
-  //   • Trainingsdagen: TDEE + (extraKcalDag - gemTrainingPerDag)
-  //     = rustdag-basis + dag-specifieke extra bovenop het gemiddelde
+  //   • Trainingsdagen: TDEE + demping × (extraKcalDag - gemTrainingPerDag)
+  //     = rustdag-basis + (gedempte) dag-specifieke extra bovenop het gemiddelde
+  //
+  // Waarom een dempingsfactor < 1?
+  //   Met demping = 1.0 viel gemTrainingPerDag exact weg tegen de TDEE-term
+  //   (TDEE = BMR×1.40 + gemTrainingPerDag), waardoor een trainingsdag enkel
+  //   afhing van die ene dag z'n activiteit. Gevolg: op een handbaldag hadden
+  //   kracht- en cardiosessies 0 effect op de dagkcal. Met demping < 1 blijft de
+  //   volledige weekbelasting (alle trainingstypes, via TDEE) zichtbaar doorwegen
+  //   in élke dag, terwijl een zwaardere dag nog steeds een hoger doel krijgt.
+  //   Over een volledige week blijft de energiebalans gelijk (≈ 7 × TDEE), want
+  //   de dag-afwijkingen sommeren tot ~0.
   //
   // Bron: Impey et al. 2018 "Fuel for the Work Required", ACSM 2016
+  const DAGTYPE_DEMPING = 0.5;
   const basisDagKcal = dagtype === 'rustdag'
     ? tdee
-    : tdee + (extraKcalDag - gemTrainingPerDag);
+    : tdee + DAGTYPE_DEMPING * (extraKcalDag - gemTrainingPerDag);
 
   const doelKcalRaw = pasDoelToe(basisDagKcal, input.doel, input.vetpct, input.geslacht);
   const doelKcalBase = pasFaseToe(doelKcalRaw, input.fase || 'in_season');
@@ -2348,7 +2359,14 @@ const genereerDagSchema = (input, dagtype, alGebruikt = {}, categoriesVoorDag = 
   const vetG = Math.round(vetGBase * vetFactor);
   const chPerKg = chG / input.gewicht;
 
-  const profiel = { bmr, pal, tdee, ffm, extraKcalDag: Math.round(extraKcalDag), trendCorrectie };
+  // Bouwstenen voor de (kloppende) formulebalk:
+  //   BMR + basisactiviteit(BMR×0.40) + trainingBijdrageDag + doelAanpassing + trend = kcalDag
+  //   trainingBijdrageDag = totale trainings-kcal voor déze dag (weekgemiddelde +
+  //     gedempte dag-bijstelling); op een rustdag = het weekgemiddelde.
+  //   doelAanpassing      = effect van doel (cut/bulk) + seizoensfase.
+  const trainingBijdrageDag = Math.round(basisDagKcal - bmr * 1.40);
+  const doelAanpassing = Math.round(doelKcalBase - basisDagKcal);
+  const profiel = { bmr, pal, tdee, ffm, extraKcalDag: Math.round(extraKcalDag), trainingBijdrageDag, doelAanpassing, trendCorrectie };
   const vezelTarget = (input.geslacht === 'man' ? 35 : 28) * (dagtype === 'rustdag' ? 0.9 : 1.0);
   const doelen = {
     kcalDag: doelKcal, eiwitG, eiwitPerKg, chG, chPerKg, vetG,
@@ -4084,7 +4102,12 @@ export default function HandbalVoedingstoolV2() {
                   <span className="mono" style={{ color: '#16a34a', fontWeight: 700 }}>⚡ MET</span>
                   <span style={{ color: '#166534' }}>
                     BMR {Math.round(dagSchema.profiel.bmr)} + {taal === 'en' ? 'base activity' : 'basisactiviteit'} {Math.round(dagSchema.profiel.bmr * 0.40)}
-                    {' + '}{taal === 'en' ? 'training' : 'training'} <strong style={{ color: '#d94f30' }}>+{dagSchema.profiel.extraKcalDag} kcal</strong>
+                    {' + '}{taal === 'en' ? 'training' : 'training'} <strong style={{ color: '#d94f30' }}>+{dagSchema.profiel.trainingBijdrageDag} kcal</strong>
+                    {dagSchema.profiel.doelAanpassing !== 0 && (
+                      <span style={{ color: dagSchema.profiel.doelAanpassing > 0 ? '#16a34a' : '#cc1f1a', fontWeight: 700 }}>
+                        {' '}{dagSchema.profiel.doelAanpassing > 0 ? '+' : ''}{dagSchema.profiel.doelAanpassing} {taal === 'en' ? '(goal)' : '(doel)'}
+                      </span>
+                    )}
                     {dagSchema.profiel.trendCorrectie !== 0 && (
                       <span style={{ color: dagSchema.profiel.trendCorrectie > 0 ? '#16a34a' : '#cc1f1a', fontWeight: 700 }}>
                         {' '}{dagSchema.profiel.trendCorrectie > 0 ? '+' : ''}{dagSchema.profiel.trendCorrectie} {taal === 'en' ? '(trend corr.)' : '(trendcorrectie)'}
