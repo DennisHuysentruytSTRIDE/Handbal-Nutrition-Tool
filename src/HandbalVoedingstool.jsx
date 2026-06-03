@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 
 // =============================================================================
 // OPSLAG-ADAPTER
@@ -710,7 +711,7 @@ const Tip = ({ id, children }) => {
           aria-label={`Meer info over ${tip.titel}`}
         >?</button>
       </span>
-      {open && (
+      {open && createPortal(
         <div
           onClick={() => setOpen(false)}
           style={{
@@ -765,7 +766,8 @@ const Tip = ({ id, children }) => {
               }}
             >{VERTALINGEN.nl.modal_sluiten}</button>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </>
   );
